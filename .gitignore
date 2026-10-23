@@ -1,0 +1,30 @@
+# Arduino / PlatformIO
+*.hex
+*.elf
+*.bin
+.pio/
+build/
+*.ino.cpp
+
+# MATLAB
+*.asv
+*.m~
+slprj/
+
+# Altium / Proteus working files (not exported)
+*.PcbDoc.Lck
+*.SchDoc.Lck
+History/
+Project Logs*/
+*.DdbLck
+*.dro
+*.DSN.bak
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor junk
+.vscode/
+*.swp

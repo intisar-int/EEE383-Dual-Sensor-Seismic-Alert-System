@@ -1,0 +1,209 @@
+**Design Justification Calculations for a Dual-Sensor Hybrid Seismic Alert System**
+
+EEE383 Electronic System Design — Group 01, Section 01
+
+**I. Signal Conditioning Op-Amp (LM358N) — Component Derivation**
+
+**A. Stage 1 — Inverting Charge-Amplifier Gain**
+
+**Given:  **Rin = 10 kΩ, Rf = 100 kΩ (Subsystem 3.3 component list).
+
+	Av = -RfRin	(1)
+
+**Substitution:  **Av = -100 kΩ10 kΩ
+
+**Result:  **Av = -10
+
+**B. Stage 2 — Sallen-Key Low-Pass Filter**
+
+**Given:  **target cutoff fc ≈ 15 Hz (Subsystem 3.3 objective); R chosen = 100 kΩ to reuse the Stage-1 feedback value.
+
+	C = 12π R fc	(2)
+
+**Substitution:  **C = 12π × 100,000 × 15
+
+**Result:  **C = 1.061 × 10- 7 F = 106.1 nF — nearest standard value 100 nF
+
+**Verification:  **with the standard values R = 100 kΩ, C = 100 nF (×2 each):
+
+	fc = 12π R C	(3)
+
+**Substitution:  **fc = 12π × 100,000 × 100 × 10- 9
+
+**Result:  **fc = 15.92 Hz
+
+**C. Reference (Bias) Voltage Verification**
+
+**Given:  **FILT_OUT swings between 0.834 V and 0.935 V, no clipping (Proteus DAT export, Subsystem 3.3 simulation).
+
+	VREF = Vmin + Vmax2	(4)
+
+**Substitution:  **VREF = 0.834 + 0.9352
+
+**Result:  **VREF = 0.8845 V ≈ 0.889 V
+
+The bias point is not an independently chosen value — with the piezo input AC-coupled through the 10 µF capacitor, no DC path exists through Rin, so the amplifier's DC output is forced to equal the non-inverting bias voltage. Averaging the observed swing bounds reproduces the same ~0.889 V bias, confirming the stage is centered with symmetric headroom on both rails.
+
+**II. Python/****ObsPy****-Derived Earthquake Signal**
+
+**Given:  **ObsPy-retrieved BW.RJOB seismogram exported as quake_signal.txt for the Proteus File Generator; N = 850 samples, T = 8.5 s.
+
+	fs = NT	(5)
+
+**Substitution:  **fs = 8508.5
+
+**Result:  **fs = 100 Hz
+
+	fNyquist = fs2	(6)
+
+**Substitution:  **fNyquist = 1002
+
+**Result:  **fNyquist = 50 Hz
+
+50 Hz matches the firmware's 100 Hz FFT sampling rate (Subsystem 3.4) and comfortably exceeds the 1–10 Hz seismic band of interest.
+
+**III. Synthetic Noise Signals for False-Positive Validation**
+
+Each synthetic vibration signal is converted from a published peak particle velocity (PPV) to peak acceleration using:
+
+	apeak = vpeak × 2π f	(7)
+
+**A. Construction / Pile-Driving Vibration (Continuous)**
+
+**Given:  **PPVref = 0.644 in/s, typical impact pile driver at 25 ft reference distance [1]; dominant band 3–12 Hz for pile driving [2], 5–30 Hz for construction equipment generally [3].
+
+**Chosen:  **synthetic test frequency f = 10 Hz (upper edge of the 1–10 Hz seismic detection band).
+
+**Substitution:  **vpeak = 0.644 × 0.0254 = 0.01636 m/s;  apeak = 0.01636 × 2π × 10
+
+**Result:  **apeak = 1.028 m/s² = 0.105 g
+
+	y(t) = 0.105 g · sin(2π · 10 · t)	(8)
+
+**B. Door-Slam Vibration (Transient)**
+
+**Given:  **PPV range 0.15–1.9 in/s for door slam [1]; discriminating detectors reject door-slam energy by blocking above 12 Hz [4].
+
+**Chosen:  **synthetic test frequency f = 20 Hz (above the 12 Hz discriminator threshold, outside the 1–10 Hz band).
+
+	vpeak = PPVmin + PPVmax2	(9)
+
+**Substitution:  **vpeak = 0.15 + 1.92 = 1.025 in/s = 0.02604 m/s
+
+**Result:  **apeak = 0.02604 × 2π × 20 = 3.272 m/s² = 0.334 g
+
+	y(t) = 0.334 g · e-t⁄τ · sin(2π · 20 · t),  τ = 0.05 s	(10)
+
+0.334 g exceeds the 0.3 g accelerometer threshold on raw amplitude, but its 20 Hz content lies outside the 1–10 Hz FFT seismic band, so the frequency-domain criterion rejects it — confirming that amplitude thresholding alone is insufficient and frequency-domain classification is required.
+
+**C. Train-Induced Ground Vibration (Continuous)**
+
+**Given:  **PPV 0.084–0.229 mm/s (near-field monitoring point, 100–300 km/h) and characteristic frequency 15.18 ± 0.10 Hz, repeatable across train types and speeds [5].
+
+**Chosen:  **representative PPV = 0.157 mm/s (midpoint), f = 15.18 Hz.
+
+**Substitution:  **vpeak = 0.157 × 10- 3 = 1.57 × 10- 4 m/s;  apeak = 1.57 × 10- 4 × 2π × 15.18
+
+**Result:  **apeak = 0.0150 m/s² = 0.00153 g
+
+	y(t) = 0.00153 g · sin(2π · 15.18 · t)	(11)
+
+Both the amplitude (≪ 0.3 g) and the 15.18 Hz frequency (outside the 1–10 Hz seismic band) place train vibration well clear of the alarm criteria at typical urban monitoring distances — an “easy-reject” case, unlike construction/pile-driving.
+
+**D. Proteus File-Generator Setup (Consistency Check)**
+
+	N = fs × T	(12)
+
+**Given:  **fₛ = 100 Hz (matches Eq. 5, the earthquake-file sample rate); T = 8.5 s (matches quake_signal.txt duration, for direct side-by-side false-positive testing).
+
+**Substitution:  **N = 100 × 8.5
+
+**Result:  **N = 850 samples
+
+N = 850 matches quake_signal.txt exactly (850 samples, 8.5 s) — confirmed consistent, so all three synthetic noise files (construction, door-slam, train) import into the same Proteus File Generator model and ADC sample-and-hold timing as the real earthquake test vector.
+
+**IV. Sensing-Node Maximum Power Calculation**
+
+**Given:  **Vrail = 3.3 V.
+
+**I₁ — ESP32-S3-WROOM-1:  **802.11b, 1 Mbps, @20.5 dBm, peak active TX current, Table 6-4 [6].
+
+**Result:  **I1 = 355 mA
+
+**I₂ — MPU-6050:  **gyroscope + accelerometer + DMP enabled, normal operating current [7].
+
+**Result:  **I2 = 3.9 mA
+
+**I₃ — LM358N:  **I_S max, V+ = 5 V, both amplifiers combined [8].
+
+**Result:  **I3 = 1.2 mA
+
+**I₄ — RBD-2229 piezo module:  **onboard bias resistor ≈ 1 MΩ from the 3.3 V rail 
+
+	I4 = VR	(13)
+
+**Substitution:  **I4 = 3.31,000,000
+
+**Result:  **I4 = 3.3 µA
+
+	Itotal = I1 + I2 + I3 + I4	(14)
+
+**Substitution:  **Itotal = 355 + 3.9 + 1.2 + 0.0033
+
+**Result:  **Itotal = 360.1 mA
+
+	Ptotal = Itotal × Vrail	(15)
+
+**Substitution:  **Ptotal = 0.3601 × 3.3
+
+**Result:  **Ptotal = 1.188 W
+
+**Given:  **F1 polyfuse hold current = 500 mA (RXEF-class).
+
+	Margin = Ihold - Itotal	(16)
+
+**Substitution:  **Margin = 500 - 360.1
+
+**Result:  **Margin = 139.9 mA (28% headroom, steady-state worst case)
+
+**V. PCB Trace Width Calculation (IPC-2221)**
+
+**Given:  **I_design = 1 A (TP4056 module charge current, Subsystem 3.1); external layer, 1 oz copper, W = 20 mil, ΔT = 10°C; k = 0.048, b = 0.44, c = 0.725 [9]; t = 1.378 mil (1 oz copper thickness).
+
+	A = W × t	(17)
+
+**Substitution:  **A = 20 × 1.378
+
+**Result:  **A = 27.56 mil²
+
+	Imax = k · ΔTb · Ac	(18)
+
+**Substitution:  **Imax = 0.048 × 100.44 × 27.560.725 = 0.048 × 2.754 × 11.07
+
+**Result:  **Imax = 1.463 A
+
+	Margin = Imax - Idesign	(19)
+
+**Substitution:  **Margin = 1.463 - 1
+
+**Result:  **Margin = 0.463 A (46% headroom) — 20 mil / 1 oz external trace confirmed adequate
+
+**REFERENCES**
+
+[1]  R. M. Lane and K. Pelham, “Ground Vibrations Emanating from Construction Equipment,” New Hampshire Dept. of Transportation, Concord, NH, USA, Rep. FHWA-NH-RD-12323W, Sep. 2012.  [https://vulcanhammer.net/wp-content/uploads/2017/01/fhwa-nh-rd-12323w.pdf](https://vulcanhammer.net/wp-content/uploads/2017/01/fhwa-nh-rd-12323w.pdf)
+
+[2]  M. R. Svinkin, “Advantages in Instrumentation of Construction Vibrations,” in Proc. Transportation Research Board 80th Annu. Meeting, Washington, DC, USA, 2001, as cited in [1].
+
+[3]  C. H. Dowding, Construction Vibrations. Englewood Cliffs, NJ, USA: Prentice Hall, 1996, as cited in [1].
+
+[4]  “Discriminating Earthquake Detector,” U.S. Patent 5 101 195, Mar. 31, 1992.  [https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/5101195](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/5101195)
+
+[5]  W. Yuan, B. Jia, Z. Zhou, J. Zhang, and P. An, “A multi-parameters assessment method and prediction model for ground vibration under the high-speed railway bridge,” Sci. Rep., vol. 15, Art. no. 10344, Mar. 2025.  [https://www.nature.com/articles/s41598-025-93595-0](https://www.nature.com/articles/s41598-025-93595-0)
+
+[6]  Espressif Systems, ESP32-S3-WROOM-1 / ESP32-S3-WROOM-1U Datasheet, v1.8, 2026.  [https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf](https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf)
+
+[7]  InvenSense, Inc., MPU-6000/MPU-6050 Product Specification, Rev. 3.4, 2013.  [https://www.cdiweb.com/datasheets/invensense/mpu-6050_datasheet_v3%204.pdf](https://www.cdiweb.com/datasheets/invensense/mpu-6050_datasheet_v3%204.pdf)
+
+[8]  Diodes Incorporated, LM358 Low Power Dual Operational Amplifiers, Datasheet DS35167 Rev. 2-2, 2011.  [https://www.diodes.com/datasheet/download/LM358.pdf](https://www.diodes.com/datasheet/download/LM358.pdf)
+
+[9]  IPC-2221, Generic Standard on Printed Board Design, IPC, Bannockburn, IL, USA.

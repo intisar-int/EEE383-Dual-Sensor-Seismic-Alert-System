@@ -1,0 +1,290 @@
+EEE383 — Dual-Sensor Hybrid Seismic Alert System
+
+**Power System Analysis ****&**** Risk Log**
+
+Current budget, overcurrent protection, and simulation-verified headroom
+
+*Dual-Sensor Hybrid Seismic Alert System — EEE383, Group 01*
+
+Revision 2 — includes Proteus-measured verification data
+
+# Executive summary
+
+Everything below is ranked by how much it actually needs your attention. Full detail for each row is in the referenced section.
+
+| **Status** | **Item** | **Section** |
+| --- | --- | --- |
+| **CRITICAL — OPEN** | LM2596 buck cannot regulate from a single-cell LiPo (needs ~4.5-5V in) — conflicts with the battery-only operating mode. | *§1, §7* |
+| **OPEN DECISION** | Shared vs. separate polyfuse between the two boards — combined peak (642 mA) exceeds a single 500 mA fuse's hold current. | *§4.3* |
+| **MONITOR** | AP2112K-3.3 dropout below ~3.55V battery — 3.3V rail will sag before the cell is truly empty. | *§5* |
+| **MONITOR** | TP4056 protection circuitry assumes a battery is present on OUT+ — not meant as a bare USB pass-through. | *§7* |
+| **UNVERIFIED** | RBD-2229 and passive buzzer current draw are estimates — no manufacturer figure exists for either. | *§2, §3* |
+| **CONFIRMED OK** | Per-board polyfuse margin (26-45%), LDO headroom (61% of rating), and battery discharge rate (0.64C) are all comfortable. | *§4.2, §5* |
+| **CONFIRMED OK** | Op-amp output headroom confirmed from real Proteus data — only 3% of the 0-3.3V window used, nowhere near clipping. | *§6* |
+| **CONFIRMED OK** | Piezo signal current scales with vibration size but stays sub-microamp even at peak — confirmed against real simulation data. | *§6.2* |
+
+**Read as: **CRITICAL needs a design decision before this can be called final. OPEN DECISION needs you to pick an option. MONITOR is a firmware/usage note, not a hardware defect. UNVERIFIED just needs a 2-minute bench measurement. CONFIRMED OK needs nothing further.
+
+# 0. Scope and assumptions
+
+- Two physical PCBs: Sensing PCB (ESP32-S3-WROOM-1, MPU-6050 breakout, RBD-2229 piezo module, LM358N conditioning stage) and Alarm PCB (ESP32-WROOM-32, common-anode RGB LED, passive piezo buzzer).
+
+- Each board is assumed to carry its own AP2112K-3.3 (or equivalent) LDO and its own 500 mA polyfuse on BAT+, consistent with the existing 3.1 schematic pattern. §4.3 also covers what happens if that assumption is wrong.
+
+The LM2596 buck converter's placement is the single biggest open question in this report — see the CRITICAL item above and §7. Everything else below assumes the LDO path, which is the only part of the power architecture that's actually confirmed.
+
+# 1. Power architecture (current state)
+
+The confirmed path (LiPo → TP4056 → polyfuse → LDO → loads) is shown in gray/blue. The LM2596 is shown in red because its role and connection point are not yet decided, and — as drawn — it cannot work the way a battery-powered buck normally would.
+
+# 2. Sensing PCB current & power budget
+
+All sensing-PCB loads run from the 3.3V rail produced by the AP2112K-3.3 LDO. Two conditions are evaluated: typical (Wi-Fi/ESP-NOW radio idle) and peak (an ESP-NOW transmit burst in progress).
+
+| **Component** | **Condition** | **Current** | **Source** |
+| --- | --- | --- | --- |
+| ESP32-S3-WROOM-1 | Active, CPU running, RF idle | 23.88 mA (measured) | Espressif [2] |
+| ESP32-S3-WROOM-1 | Wi-Fi/ESP-NOW RX | 95 – 100 mA | Espressif [1], Table 6-4 |
+| ESP32-S3-WROOM-1 | Wi-Fi/ESP-NOW TX (peak, 802.11b worst case) | 355 mA | Espressif [1], Table 6-4 |
+| MPU-6050 (bare IC) | Gyro + Accel + DMP active | 3.9 mA | InvenSense [3] |
+| MPU-6050 breakout (GY-521 style) | Active (incl. onboard LDO + power LED) | ≈ 8 mA | CentIoT GY-521 spec [4] |
+| LM358N | Quiescent, VCC ≈ 5V, full temp. | 0.5 mA typ / 1.2 mA max | UNISONIC LM358 [5] |
+| RBD-2229 piezo module | Not published by manufacturer | ≈ 5 mA (assumed) | Unverified — see §8 |
+| Pull-ups / decoupling | Static (4.7 kΩ I²C pull-ups etc.) | < 1 mA | Derived |
+
+| **Calc 2a — Sensing PCB typical current (Wi-Fi/ESP-NOW radio idle)** |
+| --- |
+| **Given** | I1 = 23.88 mA   (ESP32-S3, active/idle) I2 = 8 mA       (MPU-6050 breakout) I3 = 0.5 mA     (LM358N, quiescent) I4 = 5 mA       (RBD-2229, estimated) I5 = 0.5 mA     (pull-ups / misc) |
+| **Formula** | I_typ = I1 + I2 + I3 + I4 + I5 |
+| **Substitution** | I_typ = 23.88 + 8 + 0.5 + 5 + 0.5   (mA) |
+| **Result** | **I_typ = 37.88 mA  ≈  37.9 mA** |
+
+| **Given** | V = 3.3 V   (LDO output rail) I_typ = 0.0379 A   (from Calc 2a) |
+| --- | --- |
+| **Formula** | P_typ = V x I_typ |
+| **Substitution** | P_typ = 3.3 x 0.0379 |
+| **Result** | **P_typ = 0.125 W** |
+
+| **Calc 2b — Sensing PCB peak current (Wi-Fi/ESP-NOW TX burst)** |
+| --- |
+| **Given** | I1 = 355 mA   (ESP32-S3, TX peak, 802.11b worst case) I2 = 8 mA     (MPU-6050 breakout) I3 = 0.5 mA   (LM358N, quiescent) I4 = 5 mA     (RBD-2229, estimated) I5 = 0.5 mA   (pull-ups / misc) |
+| **Formula** | I_pk = I1 + I2 + I3 + I4 + I5 |
+| **Substitution** | I_pk = 355 + 8 + 0.5 + 5 + 0.5   (mA) |
+| **Result** | **I_pk = 369 mA** |
+
+| **Given** | V = 3.3 V   (LDO output rail) I_pk = 0.369 A   (from Calc 2b) |
+| --- | --- |
+| **Formula** | P_pk = V x I_pk |
+| **Substitution** | P_pk = 3.3 x 0.369 |
+| **Result** | **P_pk = 1.22 W   (momentary — packet-length duration only)** |
+
+The AP2112K-3.3 is rated for 600 mA continuous [6]; the 369 mA peak sits at 61% of that rating. Because it's a linear regulator, input (battery) current tracks output current 1:1 — this is also the current the polyfuse and battery see.
+
+# 3. Alarm PCB current & power budget
+
+The ESP32-WROOM-32 runs from 3.3V (its own LDO); the RGB LED and buzzer are driven directly from BAT+ per the 3.6 schematic. Both contribute to what the polyfuse sees, since the 3.3V rail is itself derived from BAT+.
+
+| **Component** | **Condition** | **Current** | **Source** |
+| --- | --- | --- | --- |
+| ESP32-WROOM-32 | Active, RF idle (Stage-1 standby/indicator) | ≈ 30 – 40 mA | Order-of-magnitude, [11] |
+| ESP32-WROOM-32 | Wi-Fi RX | 95 – 100 mA | LastMinuteEngineers [11] |
+| ESP32-WROOM-32 | Wi-Fi TX (peak) | 180 – 240 mA | LastMinuteEngineers [11] |
+| RGB LED (worst case, all 3 ch.) | 220 Ω, BAT+ 3.0–4.2V minus Vf | 2 – 10 mA/ch → ≤30 mA | Derived from schematic 3.6 |
+| Passive piezo buzzer | PWM ~2–4 kHz via 100 Ω | ≈ 1 – 3 mA (assumed) | Unverified — see §8 |
+
+| **Calc 3a — Alarm PCB typical current (standby, one LED channel, buzzer off)** |
+| --- |
+| **Given** | I1 = 35 mA   (ESP32-WROOM-32, active/RF idle) I2 = 3 mA    (RGB LED, one channel on) I3 = 0 mA    (buzzer off) |
+| **Formula** | I_typ = I1 + I2 + I3 |
+| **Substitution** | I_typ = 35 + 3 + 0   (mA) |
+| **Result** | **I_typ = 38 mA** |
+
+| **Calc 3b — Alarm PCB peak current (Wi-Fi TX + worst-case all-channel alarm + buzzer)** |
+| --- |
+| **Given** | I1 = 240 mA   (ESP32-WROOM-32, TX peak) I2 = 30 mA    (RGB LED, all 3 channels, worst case) I3 = 3 mA     (passive buzzer, estimated) |
+| **Formula** | I_pk = I1 + I2 + I3 |
+| **Substitution** | I_pk = 240 + 30 + 3   (mA) |
+| **Result** | **I_pk = 273 mA** |
+
+# 4. Overcurrent protection — polyfuse validation
+
+4.1 Reference part
+
+The schematic specifies a "500 mA resettable" through-hole polyfuse. The closest documented match is the Littelfuse RXEF050 radial PTC [7]:
+
+| **Parameter** | **Symbol** | **Value** |
+| --- | --- | --- |
+| Hold current (max. sustained, no trip) | Ihold | 500 mA |
+| Trip current (min. current that will trip it) | Itrip | 1 A |
+| Max fault current (no damage) | Imax | 40 A |
+| Time to trip (rated fault condition) | — | 4 s |
+| Initial / post-trip resistance | Ri / R1 | 500 mΩ / 1.17 Ω |
+| Max voltage rating | Vmax | 72 V |
+
+4.2 Per-board margin (each board on its own fuse)
+
+| **Calc 4a — Sensing PCB fuse margin** |
+| --- |
+| **Given** | I_pk = 369 mA   (Calc 2b) Ihold = 500 mA   (Ref. RXEF050) |
+| **Formula** | Margin_hold = (Ihold - I_pk) / Ihold x 100% |
+| **Substitution** | Margin_hold = (500 - 369) / 500 x 100% |
+| **Result** | **Margin_hold = 26.2% below Ihold** |
+
+| **Given** | I_pk = 369 mA   (Calc 2b) Itrip = 1000 mA   (Ref. RXEF050) |
+| --- | --- |
+| **Formula** | Margin_trip = Itrip / I_pk |
+| **Substitution** | Margin_trip = 1000 / 369 |
+| **Result** | **Margin_trip = 2.71x below Itrip** |
+
+| **Calc 4b — Alarm PCB fuse margin** |
+| --- |
+| **Given** | I_pk = 273 mA   (Calc 3b) Ihold = 500 mA   (Ref. RXEF050) |
+| **Formula** | Margin_hold = (Ihold - I_pk) / Ihold x 100% |
+| **Substitution** | Margin_hold = (500 - 273) / 500 x 100% |
+| **Result** | **Margin_hold = 45.4% below Ihold** |
+
+| **Given** | I_pk = 273 mA   (Calc 3b) Itrip = 1000 mA   (Ref. RXEF050) |
+| --- | --- |
+| **Formula** | Margin_trip = Itrip / I_pk |
+| **Substitution** | Margin_trip = 1000 / 273 |
+| **Result** | **Margin_trip = 3.66x below Itrip** |
+
+With a dedicated fuse per board, neither board's worst-case transient gets close to Ihold. The 500 mA part is correctly sized for this scenario.
+
+4.3 Combined scenario (single shared battery + single shared fuse)
+
+| **Calc 4c — Combined peak current** |
+| --- |
+| **Given** | I_sensing_pk = 369 mA   (Calc 2b) I_alarm_pk = 273 mA   (Calc 3b) |
+| **Formula** | I_combined = I_sensing_pk + I_alarm_pk |
+| **Substitution** | I_combined = 369 + 273 |
+| **Result** | **I_combined = 642 mA** |
+
+| **Given** | I_combined = 642 mA   (above) Ihold = 500 mA   (Ref. RXEF050) |
+| --- | --- |
+| **Formula** | Overshoot% = (I_combined - Ihold) / Ihold x 100% |
+| **Substitution** | Overshoot% = (642 - 500) / 500 x 100% |
+| **Result** | **Overshoot% = 28.4% ABOVE Ihold** |
+
+| **A single shared 500 mA fuse is undersized for this combined case.** 642 mA exceeds the 500 mA hold current by 28.4%. Ihold is the maximum current the device tolerates indefinitely without tripping, so a sustained combined draw at this level will eventually trip the fuse, even though it never reaches the 1A trip-current spec. This only matters if both boards' Wi-Fi/ESP-NOW TX bursts overlap long enough to count as sustained rather than a brief joint transient. Fix if a shared supply is intended: keep separate fuses per board (simplest), or upsize the shared fuse to ≥750 mA hold current. |
+| --- |
+
+4.4 Battery discharge margin
+
+| **Calc 4d — Battery C-rate under worst-case combined draw** |
+| --- |
+| **Given** | I_combined = 642 mA   (Calc 4c) Battery capacity = 1000 mAh |
+| **Formula** | C-rate = I_combined / Capacity |
+| **Substitution** | C-rate = 642 mA / 1000 mAh |
+| **Result** | **C-rate = 0.64C** |
+
+Most generic single-cell LiPo packs are rated for at least 1C continuous, so the cell is not the binding constraint in either scenario — the polyfuse is.
+
+# 5. LDO headroom note (AP2112K-3.3)
+
+The AP2112K-3.3 regulates correctly only while VBAT stays above VOUT plus its dropout voltage:
+
+| **Calc 5 — Minimum battery voltage for regulation to hold** |
+| --- |
+| **Given** | VOUT = 3.3 V   (LDO setpoint) Vdropout = 0.25 V   (typical at 600 mA, Ref. [6]) |
+| **Formula** | VBAT_min = VOUT + Vdropout |
+| **Substitution** | VBAT_min = 3.3 + 0.25 |
+| **Result** | **VBAT_min = 3.55 V** |
+
+Below VBAT ≈ 3.55V — as the LiPo approaches its ~3.0V discharge floor — the LDO enters dropout and the 3.3V rail sags below spec. This is a firmware/brown-out consideration, not a fuse or wiring issue, but it's worth handling in software so the ESP32 shuts down cleanly rather than behaving unpredictably on a nearly-dead cell.
+
+# 6. Simulation-verified headroom (Proteus export)
+
+6.1 Op-amp output vs. supply rails
+
+Pulled directly from the exported Proteus graph data (FILT OUT trace, 9-second run, 42,064 samples) — measured, not assumed:
+
+| **Calc 6a — Peak-to-peak swing** |
+| --- |
+| **Given** | V_hi = 0.9347 V   (measured peak high, t = 1.639 s) V_lo = 0.8343 V   (measured peak low, t = 1.516 s) |
+| **Formula** | Swing = V_hi - V_lo |
+| **Substitution** | Swing = 0.9347 - 0.8343 |
+| **Result** | **Swing = 0.100 V** |
+
+| **Given** | Swing = 0.100 V   (above) Rail range = 3.3V - 0V = 3.3 V |
+| --- | --- |
+| **Formula** | %Used = Swing / Rail_range x 100% |
+| **Substitution** | %Used = 0.1004 / 3.3 x 100% |
+| **Result** | **%Used = 3.0%** |
+
+| **Given** | V_lo = 0.8343 V   (measured peak low) V_hi = 0.9347 V   (measured peak high) Rails at 0 V and 3.3 V |
+| --- | --- |
+| **Formula** | Headroom = min( V_lo - 0V ,  3.3V - V_hi ) |
+| **Substitution** | Headroom = min( 0.8343 ,  3.3 - 0.9347 ) = min( 0.834 ,  2.365 ) |
+| **Result** | **Headroom = 0.834 V   (to the nearer rail, 0V)** |
+
+The signal is nowhere near clipping — it uses only 3% of the available window. If anything, this suggests there's room to increase gain without any clipping risk, assuming this run represents realistic event amplitude (worth double-checking against the intended worst-case ObsPy input).
+
+6.2 Piezo signal current — real data vs. generic assumption
+
+Re-derived using the actual raw piezo-node signal (C1(1) trace) instead of a hypothetical sinusoid. The governing relationship for a capacitive source is I = C x dV/dt:
+
+| **Calc 6b — Peak signal current from measured dV/dt** |
+| --- |
+| **Given** | dV/dt = 4.66 V/s   (peak observed in simulation, t = 1.500 s) C = 10 / 35 / 50 nF   (generic disc range, Ref. [12] — RBD-2229 itself unpublished) |
+| **Formula** | I_peak = C x dV/dt |
+| **Substitution** | I_peak(10nF) = 10e-9 x 4.66 = 4.66e-8 A I_peak(35nF) = 35e-9 x 4.66 = 1.63e-7 A I_peak(50nF) = 50e-9 x 4.66 = 2.33e-7 A |
+| **Result** | **I_peak = 0.047 uA  /  0.163 uA  /  0.233 uA   (10 / 35 / 50 nF respectively)** |
+
+| **Given** | dV/dt_p99 = 3.05 V/s   (99th-percentile, outlier-robust) C = 35 nF   (measured generic disc, Ref. [12]) |
+| --- | --- |
+| **Formula** | I_p99 = C x dV/dt_p99 |
+| **Substitution** | I_p99 = 35e-9 x 3.05 |
+| **Result** | **I_p99 = 0.107 uA   (robust check against the single-sample peak above)** |
+
+Roughly four orders of magnitude below the milliamp-scale currents already in the budget (compare to Calc 2a/2b) — confirmed negligible, not just assumed. No revision to §2's power budget is needed.
+
+# 7. Charging-path notes (TP4056, LM2596)
+
+TP4056 standby current is ≈50-55 µA and shutdown current ≈40-55 µA — negligible against everything else in this report [9]. Charge current is set by RPROG; a 1.3 kΩ resistor (common on generic breakout boards) gives ≈1.1A typical, so confirm the actual RPROG value on your specific module before relying on that number.
+
+| **TP4056 is not a bare USB-to-3.3V pass-through.** Its protection circuitry assumes a LiPo cell is present on OUT+. If "direct charger" mode is ever meant to mean running the boards from USB with no battery installed, that's outside the intended use of this IC — fine with the battery present, risky without it. |
+| --- |
+
+| **LM2596 cannot run from a single-cell LiPo.** The LM2596 needs roughly 4.5-5V in to regulate correctly [10]; a single-cell LiPo only ever supplies 3.0-4.2V. If it's wired to BAT+, it simply will not produce an output on battery power — only while USB is connected. This directly conflicts with the stated requirement to support both battery-only and direct-charger operation, and is the one item in this report that needs an actual design decision, not just a calculation. Resolution paths: feed the LM2596 from raw VBUS (5V) instead of BAT+ and accept it only works while plugged in; drop the buck converter from the battery-powered path entirely and let the LDO handle 3.3V as already validated in §2/§3; or clarify what the LM2596's actual intended role is so this section can be completed. |
+| --- |
+
+# 8. Figures not available from any datasheet
+
+- RBD-2229 piezo module current draw — RoboticsBD's listing gives dimensions and I/O type but no supply-current spec. Estimated at ≈5 mA by analogy to comparator-equipped modules in the same catalog line.
+
+- Passive piezo buzzer current draw — no datasheet was available for the specific part; the ≈1-3 mA estimate is an order-of-magnitude placeholder.
+
+Both are small enough that even a 3-5× error would not change the fuse-margin conclusions in §4, but a bench measurement (multimeter in series with each module at 3.3V) is the only way to close this gap with certainty.
+
+# References
+
+**[1] **Espressif Systems, "ESP32-S3-WROOM-1 / ESP32-S3-WROOM-1U Datasheet," v1.8, Table 6-4. https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf
+
+**[2] **Espressif Systems, "Current Consumption Measurement of Modules — ESP32-S3," ESP-IDF Programming Guide. https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/current-consumption-measurement-modules.html
+
+**[3] **InvenSense, "MPU-6000/MPU-6050 Product Specification," Rev. 3.4, Document No. PS-MPU-6000A-00.
+
+**[4] **CentIoT, "GY-521 MPU-6050 Module, 3-Axis Accelerometer/Gyro," product specification. https://m.indiamart.com/proddetail/centiot-gy-521-mpu-6050-module-3-axis-analog-gyro-accelerometer-module-22208797155.html
+
+**[5] **UNISONIC Technologies Co., Ltd, "LM358 Low Power Dual Operational Amplifier" datasheet. https://www.unisonic.com.tw/uploadfiles/836/part_no_pdf/LM358.pdf
+
+**[6] **Diodes Incorporated, "AP2112, 600 mA CMOS LDO Regulator with Enable," Doc. No. DS39724. https://www.diodes.com/assets/Datasheets/AP2112.pdf
+
+**[7] **Littelfuse Inc., RXEF050 PolySwitch resettable PTC fuse. https://azcus.digikey.com/en/products/detail/littelfuse-inc/RXEF050/5015994
+
+**[8] **Eaton, "PolyTron™ PTC Resettable Device Application Guidelines." https://www.eaton.com/us/en-us/products/electronic-components/topics/polytron--positive-temeperature-coefficient--ptc--resettable-dev.html
+
+**[9] **Nanjing Extension Microelectronics / UMW, "TP4056 Li-ion Battery Charger IC" datasheet. https://www.umw-ic.com/static/pdf/493f603e988f83ce21e556bca0c516fd.pdf
+
+**[10] **Texas Instruments, "LM2596 SIMPLE SWITCHER Power Converter, 150 kHz, 3A Step-Down Voltage Regulator," SNVS124C. https://www.ti.com/lit/ds/symlink/lm2596.pdf
+
+**[11] **LastMinuteEngineers, "Insight Into ESP32 Sleep Modes & Their Power Consumption." https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/
+
+**[12] **Zbotic / element14 Community, generic small piezoelectric disc capacitance references (10-50 nF; 35 nF measured example) — used as a stand-in for RBD-2229 since RoboticsBD publishes none. https://zbotic.in/piezoelectric-sensor-vibration-impact-and-energy-harvesting/ ; https://community.element14.com/technologies/test-and-measurement/b/blog/posts/piezo-disk-as-vibration-sensor-input-buffer-and-filter
+
+**[13] **RoboticsBD, "Piezoelectric Vibration Sensor Module with Analog & Digital Output" (RBD-2229) product page — no current-consumption spec published. https://store.roboticsbd.com/sensors/2229-piezoelectric-vibration-sensor-module-with-analog-digital-output-robotics-bangladesh.html
+
+**[14] **Proteus-exported transient analysis data (blaaah.DAT), FILT OUT and C1(1) traces, supplied by the project team — source of all §6 measured figures.
+
+Page  of
