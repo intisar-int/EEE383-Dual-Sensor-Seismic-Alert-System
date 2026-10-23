@@ -1,6 +1,5 @@
 # Dual-Sensor Hybrid Seismic Alert System
 
-EEE383 Electronic System Design, Section 01, BRAC University.
 Project assigned 30 June 2026. Report submitted 01 September 2026.
 
 ## Objective
