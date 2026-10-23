@@ -1,6 +1,6 @@
 # Dual-Sensor Hybrid Seismic Alert System
 
-EEE383 Electronic System Design, Group 01, Section 01, BRAC University.
+EEE383 Electronic System Design, Section 01, BRAC University.
 Project assigned 30 June 2026. Report submitted 01 September 2026.
 
 ## Objective
@@ -11,22 +11,6 @@ door slams, passing trains or trucks, or nearby construction. A piezoelectric
 disc and an MPU-6050 accelerometer are each read, conditioned, and frequency-
 analyzed on an ESP32, and the result is checked against real earthquake data
 before the alarm fires.
-
-## Team
-
-| ID | Name | Primary Subsystem |
-| --- | --- | --- |
-| 23121008 | Jarin Tarannum Anan | 3.6 |
-| 22221203 | Salman Sadek | 3.3 |
-| 22221080 | Tarteela Arobi | 3.1 |
-| 22221152 | Ishraq Bin Arif | 3.1 |
-| 22221094 | Raihana Rahman | 3.5 |
-| 21221027 | Bitto George Hembrom | 3.4 |
-| 22221004 | Intisar Enam Naveed | 3.5 |
-| 22221111 | Intisar Ahmed | 3.4 |
-| 21221055 | S.M. Tasin Tahmid | 3.1 |
-| 22221136 | Rehnuma Tafannom | Project Manager |
-| 22221039 | Fabiha Mehrab | 3.2 |
 
 ## Architecture
 
@@ -96,6 +80,49 @@ and schematics in this repo are not misread:
   bench-tested, per Section 3.1 of the report.
 - **Gateway Stage 2 validation not implemented.** EMSC/USGS polling and the
   two-node ESP-NOW link are still to be written.
+
+<!-- gallery:start -->
+## Results and figures
+
+Hardware photos, schematics, PCB layouts and simulation captures. Every raw capture is kept unedited in [`hardware/capture-screenshots/`](hardware/capture-screenshots/).
+
+### Fabricated boards
+
+<table>
+<tr><td align="center" width="50%"><img src="hardware/pcb-photos/etched_boards_angle_1.jpg" width="100%" alt="Etched and drilled boards, unpopulated: Sensing PCB (larger) and Alarm/Gateway PCB (smaller)"><br><sub>Etched and drilled boards, unpopulated: Sensing PCB (larger) and Alarm/Gateway PCB (smaller)</sub></td><td align="center" width="50%"><img src="hardware/pcb-photos/etched_boards_angle_2.jpg" width="100%" alt="The same two boards from a second angle"><br><sub>The same two boards from a second angle</sub></td></tr>
+</table>
+
+### Subsystem schematics
+
+<table>
+<tr><td align="center" width="50%"><img src="hardware/schematics/3_1_power_regulation_schematic.png" width="100%" alt="3.1 Power regulation"><br><sub>3.1 Power regulation</sub></td><td align="center" width="50%"><img src="hardware/schematics/3_2_dual_axis_seismic_sensing.svg" width="100%" alt="3.2 Dual-axis seismic sensing (MPU-6050 and piezo)"><br><sub>3.2 Dual-axis seismic sensing (MPU-6050 and piezo)</sub></td></tr>
+<tr><td align="center" width="50%"><img src="hardware/schematics/3_5_esp32_mcu_iot_schematic.png" width="100%" alt="3.5 ESP32 MCU and ESP-NOW link"><br><sub>3.5 ESP32 MCU and ESP-NOW link</sub></td><td align="center" width="50%"><img src="hardware/schematics/3_6_alarm_indicator_schematic.png" width="100%" alt="3.6 Alarm indicator (LEDs and buzzer)"><br><sub>3.6 Alarm indicator (LEDs and buzzer)</sub></td></tr>
+</table>
+
+### Sensing PCB (ESP32-S3, MPU-6050, piezo with LM358 conditioning)
+
+<table>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_110630.png" width="100%" alt="Full schematic"><br><sub>Full schematic</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260828_211242.png" width="100%" alt="Piezo and LM358 conditioning stage"><br><sub>Piezo and LM358 conditioning stage</sub></td></tr>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_110723.png" width="100%" alt="Top-layer routing"><br><sub>Top-layer routing</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_110731.png" width="100%" alt="Bottom-layer routing"><br><sub>Bottom-layer routing</sub></td></tr>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_110428.png" width="100%" alt="Component placement view"><br><sub>Component placement view</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_110742.png" width="100%" alt="3D view"><br><sub>3D view</sub></td></tr>
+</table>
+
+### Alarm/Gateway PCB (ESP32 DevKitC, LEDs, buzzer)
+
+<table>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260816_232631.png" width="100%" alt="Schematic"><br><sub>Schematic</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260816_232711.png" width="100%" alt="Top-layer routing"><br><sub>Top-layer routing</sub></td></tr>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260816_233050.png" width="100%" alt="2D board preview"><br><sub>2D board preview</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260816_232737.png" width="100%" alt="3D view"><br><sub>3D view</sub></td></tr>
+</table>
+
+### Proteus simulation of the FFT pipeline (Arduino Mega 2560 stand-in)
+
+<table>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_111141.png" width="100%" alt="Simulated circuit"><br><sub>Simulated circuit</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_111511.png" width="100%" alt="Circuit with scope during a seismic-like burst"><br><sub>Circuit with scope during a seismic-like burst</sub></td></tr>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_111043.png" width="100%" alt="Scope trace, quiet input"><br><sub>Scope trace, quiet input</sub></td><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_111323.png" width="100%" alt="Scope trace, single impulse"><br><sub>Scope trace, single impulse</sub></td></tr>
+<tr><td align="center" width="50%"><img src="hardware/capture-screenshots/Screenshot_20260830_111420.png" width="100%" alt="Scope trace, seismic-like burst"><br><sub>Scope trace, seismic-like burst</sub></td><td align="center" width="50%"><img src="docs/figures/FFT_Detection_Pipeline_Signal_Comparison.png" width="100%" alt="FFT detection pipeline, signal comparison (MATLAB)"><br><sub>FFT detection pipeline, signal comparison (MATLAB)</sub></td></tr>
+</table>
+
+<!-- gallery:end -->
 
 ## Repository layout
 
@@ -174,3 +201,23 @@ across the design justification: Espressif ESP32-S3 datasheet, InvenSense
 MPU-6050 datasheet, TI LM2596 datasheet, Diodes AP2112 datasheet (historical,
 see note above), IPC-2221, and a 2025 Scientific Reports paper on
 high-speed-rail ground vibration used for the synthetic train test signal.
+
+## Contributors
+
+| Name | Primary subsystem |
+| --- | --- |
+| Jarin | 3.6 |
+| Salman | 3.3 |
+| Tarteela | 3.1 |
+| Ishraq | 3.1 |
+| Raihana | 3.5 |
+| Bitto | 3.4 |
+| Intisar E. | 3.5 |
+| Intisar A. | 3.4 |
+| Tasin | 3.1 |
+| Rehnuma | Project Manager |
+| Fabiha | 3.2 |
+
+## License
+
+Released under the MIT License. See [`LICENSE`](LICENSE).
